@@ -1,59 +1,62 @@
 ﻿import asyncio
 import os
 import sys
-import io
 
-# Đảm bảo in tiếng Việt trên console Windows không bị lỗi
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
-sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
-
-from dotenv import load_dotenv
 from browser_use import Agent, Browser
 from browser_use.llm.models import ChatGoogle, ChatOpenAI
+from dotenv import load_dotenv
+
+# Ensure UTF-8 output on Windows consoles without closing underlying buffers
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
 
 load_dotenv()
 
 BRAVE_PATH = r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"
 
+
 def get_llm():
     api_key = os.getenv("GEMINI_API_KEY")
     if api_key:
         print("[*] Đang kết nối mô hình Google Gemini (gemini-3.6-flash)...")
-        # Sử dụng model gemini-3.6-flash đúng với thông báo của Google API
         return ChatGoogle(model="gemini-3.6-flash", api_key=api_key)
 
-    elif os.getenv("OPENAI_API_KEY"):
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if openai_key:
         print("[*] Đang kết nối mô hình OpenAI...")
-        return ChatOpenAI(model="gpt-4o-mini", api_key=os.getenv("OPENAI_API_KEY"))
+        return ChatOpenAI(model="gpt-4o-mini", api_key=openai_key)
 
-    else:
-        print("[!] Không tìm thấy API Key nào trong file .env!")
-        sys.exit(1)
+    print("[!] Không tìm thấy API Key nào trong file .env!")
+    sys.exit(1)
+
 
 async def run_task(task_description: str):
     llm = get_llm()
 
     browser = Browser(
         executable_path=BRAVE_PATH,
-        headless=False
+        headless=False,
     )
 
     agent = Agent(
         task=task_description,
         llm=llm,
-        browser=browser
+        browser=browser,
     )
 
-    print(f"\n[+] Khởi động trình duyệt Brave thành công!")
+    print("\n[+] Khởi động trình duyệt Brave thành công!")
     print(f"[+] Nhiệm vụ: {task_description}\n")
     history = await agent.run()
 
-    print("\n" + "="*20 + " KẾT QUẢ TỔNG HỢP " + "="*20)
-    try:
+    print("\n" + "=" * 20 + " KẾT QUẢ TỔNG HỢP " + "=" * 20)
+    if hasattr(history, "final_result"):
         print(history.final_result())
-    except Exception:
+    else:
         print(history)
     return history
+
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:

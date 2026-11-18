@@ -1,152 +1,114 @@
-# Brave LLM Agent Bridge
+<div align="center">
 
-A lightweight local automation bridge connecting LLMs (Google Gemini / OpenAI) directly to your active **Brave Browser** session via Chrome DevTools Protocol (CDP).
+# Broswer-agent-brave
 
----
+**Local FastAPI bridge and CLI runner for driving Brave Browser via `browser-use` and CDP.**
 
-## The Idea: Extending "Awesome LLM Apps"
+[![CI](https://github.com/doducanhkhoi-ops/Broswer-agent-brave/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/doducanhkhoi-ops/Broswer-agent-brave/actions/workflows/ci.yml)
+[![Security Audit](https://github.com/doducanhkhoi-ops/Broswer-agent-brave/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/doducanhkhoi-ops/Broswer-agent-brave/actions/workflows/security.yml)
+[![CodeQL](https://github.com/doducanhkhoi-ops/Broswer-agent-brave/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/doducanhkhoi-ops/Broswer-agent-brave/actions/workflows/codeql.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/github/license/doducanhkhoi-ops/Broswer-agent-brave)](./LICENSE)
 
-This project was built upon the browser automation recipes in [Shubhamsaboo/awesome-llm-apps](https://github.com/Shubhamsaboo/awesome-llm-apps) and powered by [browser-use](https://github.com/browser-use/browser-use).
-
-Standard open-source templates run agents in disposable, isolated browser instances. In daily workflows, that breaks down:
-
-| Feature | Awesome LLM Apps (Default Demo) | This Implementation (Brave Bridge) |
-|---|---|---|
-| **Session** | Stateless, blank Chromium window | Attaches to your live Brave window (`localhost:9222`) |
-| **Authentication** | Blocked by logins, 2FA, Captchas | Inherits your active logins (Google, Facebook, YouTube) |
-| **Interface** | One-shot CLI run | Persistent FastAPI server (`:8989`) callable from any app |
-| **Execution** | Pure screenshot-to-LLM loop (slow) | Hybrid: LLM reasoning + Direct CDP/DOM events (instant) |
+</div>
 
 ---
 
-## Prerequisites
-
-- **OS:** Windows 10/11 (macOS / Linux compatible by updating executable path)
-- **Browser:** [Brave Browser](https://brave.com/)
-- **Python:** 3.11+
-- **API Key:** Google Gemini API Key or OpenAI API Key
+Connects LLM agents (`Gemini` or `OpenAI`) directly to an active Brave window over Chrome DevTools Protocol (`localhost:9222`) or launches a local Brave instance on demand.
 
 ---
 
-## Step-by-Step Setup Guide
+## Why Broswer-agent-brave?
 
-### 1. Launch Brave with Remote Debugging
-
-Before starting the agent, Brave must run with debugging port `9222` enabled.
-
-1. Close all running Brave windows:
-   ```powershell
-   Stop-Process -Name "brave" -Force -ErrorAction SilentlyContinue
-   ```
-
-2. Start Brave with the debugging flag:
-   ```powershell
-   & "C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe" --remote-debugging-port=9222
-   ```
-
-   **Desktop Shortcut Setup:**  
-   Right-click Desktop -> **New** -> **Shortcut** -> Target:  
-   `"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe" --remote-debugging-port=9222`
-
-3. Verify: open `http://localhost:9222/json/version` in your browser. It should return a JSON status object.
+- **CDP session reuse**: Attaches to an already-open Brave window on port `9222` to preserve logins and cookies.
+- **Automatic fallback**: Launches a fresh Brave instance from `BRAVE_PATH` if CDP `9222` is unavailable.
+- **Dual LLM provider**: Uses `GEMINI_API_KEY` (`gemini-3.6-flash`) by default and falls back to `OPENAI_API_KEY` (`gpt-4o-mini`).
+- **Local HTTP bridge**: Exposes `POST /agent` on `127.0.0.1:8989` for external triggers and scripts.
 
 ---
 
-### 2. Clone & Install Dependencies
+## Feature Overview
 
-```powershell
-git clone https://github.com/doducanhkhoi-ops/brave-llm-agent.git
-cd brave-llm-agent
+| Component | Behavior |
+| --- | --- |
+| **HTTP Server** (`server.py`) | FastAPI endpoint `POST /agent` accepting `{"task": "..."}` on port `8989` |
+| **CLI Runner** (`main.py`) | Single-shot async execution from command-line arguments |
+| **Provider Resolver** | Selects `ChatGoogle` or `ChatOpenAI` from `.env` credentials |
+| **Browser Connector** | Attaches to `http://localhost:9222` with fallback to local Brave binary |
 
-# Create and activate virtual environment
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+---
 
-# Install required packages
+## Quick Start
+
+### 1. Install
+
+```bash
+git clone https://github.com/doducanhkhoi-ops/Broswer-agent-brave.git
+cd Broswer-agent-brave
 pip install -r requirements.txt
 ```
 
----
+### 2. Configure `.env`
 
-### 3. Configure API Key
+```bash
+cp .env.example .env
+```
 
-1. Create your `.env` file from the example:
-   ```powershell
-   Copy-Item .env.example .env
-   ```
+```env
+GEMINI_API_KEY=your_gemini_api_key
+# Optional fallback:
+# OPENAI_API_KEY=your_openai_api_key
+```
 
-2. Add your Gemini API key (or OpenAI key) in `.env`:
-   ```env
-   GEMINI_API_KEY=your_actual_key_here
-   ```
+### 3. Run
 
----
+**CLI mode:**
 
-## Usage Modes
+```bash
+python main.py "Go to news.ycombinator.com and summarize the top 3 posts"
+```
 
-### Mode A: Persistent FastAPI Server (Recommended)
+**HTTP Bridge mode:**
 
-Keeps a local bridge server listening on port `8989` so background scripts, OS hotkeys, or other AI agents can dispatch web tasks on demand.
+```bash
+# Optional: start Brave with CDP enabled
+brave.exe --remote-debugging-port=9222
 
-1. Start the server:
-   ```powershell
-   python server.py
-   ```
+# Start FastAPI bridge on 127.0.0.1:8989
+python server.py
+```
 
-2. Send tasks via PowerShell or cURL:
+```bash
+curl -X POST http://127.0.0.1:8989/agent \
+  -H "Content-Type: application/json" \
+  -d '{"task": "Open github.com and check notifications"}'
+```
 
-   **PowerShell:**
-   ```powershell
-   Invoke-RestMethod -Uri "http://127.0.0.1:8989/agent" `
-     -Method Post `
-     -ContentType "application/json" `
-     -Body '{"task": "Go to YouTube and search for Lo-Fi chill beats"}'
-   ```
+Output:
 
-   **cURL:**
-   ```bash
-   curl -X POST http://127.0.0.1:8989/agent \
-     -H "Content-Type: application/json" \
-     -d '{"task": "Check my upcoming events on Google Calendar"}'
-   ```
-
-### Mode B: Direct CLI Runner
-
-Run a single task directly:
-
-```powershell
-python main.py "Open Google Calendar and list my meetings for today"
+```json
+{
+  "status": "success",
+  "result": "..."
+}
 ```
 
 ---
 
-## Project Structure
+## Testing & Security
 
-```text
-├── .env.example          # Sample environment variables
-├── .gitignore            # Ignores .env, virtualenvs, cache
-├── requirements.txt      # Minimal dependencies
-├── main.py               # Standalone CLI task runner
-├── server.py             # FastAPI bridge server (:8989)
-└── README.md             # Project documentation
+```bash
+python -m unittest discover -s tests -v
 ```
 
----
-
-## Troubleshooting
-
-| Issue | Cause & Fix |
-|---|---|
-| `Cannot connect to localhost:9222` | Brave was already running before adding the flag. Run `Stop-Process -Name "brave" -Force` and relaunch. |
-| `Brave path not found` | If Brave is installed in AppData, update `BRAVE_PATH` in `server.py` and `main.py`. |
-| `Script execution disabled` (PowerShell) | Run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` in your terminal session. |
+| Check | Tool | Scope |
+| --- | --- | --- |
+| **Unit & API Tests** | `pytest` (`3.10`, `3.11`, `3.12`) | LLM selection, `/agent` endpoint, CDP-to-local fallback, error handling |
+| **SAST** | GitHub CodeQL | Static vulnerability analysis on Python source |
+| **Security Lint** | `bandit` + `ruff` | Exception hygiene, static security checks |
 
 ---
-
-## Acknowledgements
-
-- [Shubham Saboo / awesome-llm-apps](https://github.com/Shubhamsaboo/awesome-llm-apps) for practical AI agent architecture recipes.
-- [browser-use](https://github.com/browser-use/browser-use) for the underlying web interaction agent engine.
 
 ## License
-Apache-2.0
+
+[Apache License 2.0](./LICENSE)
