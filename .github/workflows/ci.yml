@@ -28,4 +28,4 @@ jobs:
           pip install fastapi uvicorn pydantic python-dotenv httpx pytest
 
       - name: Run unit & API tests
-        run: pytest -v
+        run: python -m pytest -v
